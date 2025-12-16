@@ -7,9 +7,9 @@
 ```bash
 cd worker
 npm install
-npx wrangler login  # 首次使用需要登录
-npx wrangler secret put GEMINI_API_KEY  # 输入你的 Gemini API Key
-npm run deploy  # 一键部署
+npx wrangler login
+npx wrangler secret put GEMINI_API_KEY
+npm run deploy
 ```
 
 **复制部署后的 Workers URL**（类似：`https://qiankun-gemini-proxy.xxx.workers.dev`）

@@ -5,22 +5,20 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+# 确保有足够的权限
 permissions:
   contents: read
   pages: write
   id-token: write
 
+# 只允许一个并发部署
 concurrency:
   group: "pages"
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,8 +34,8 @@ jobs:
       
       - name: Build
         env:
-          # 后端代理地址，部署 Workers 后更新此值
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || 'https://qiankun-gemini-proxy.your-username.workers.dev' }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: npm run build
       
       - name: Setup Pages
@@ -47,7 +45,14 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: './dist'
-      
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
