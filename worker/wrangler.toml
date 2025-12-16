@@ -1,0 +1,13 @@
+name = "qiankun-gemini-proxy"
+main = "index.ts"
+compatibility_date = "2024-01-01"
+
+# 环境变量在 Cloudflare Dashboard 中设置，或使用 wrangler secret put
+# 本地开发使用 .dev.vars 文件
+
+[env.production]
+name = "qiankun-gemini-proxy"
+
+[env.development]
+name = "qiankun-gemini-proxy-dev"
+

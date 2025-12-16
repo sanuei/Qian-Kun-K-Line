@@ -82,7 +82,10 @@ export const TRANSLATIONS = {
     wechat: '微信',
     verified: '已验证',
     copyContact: '复制',
-    inputPlaceholder: '在此输入激活码'
+    inputPlaceholder: '在此输入激活码',
+    xianyuBuy: '闲鱼购买',
+    xianyuBuyDesc: '在闲鱼平台购买，安全便捷',
+    xianyuLink: '打开闲鱼链接'
   },
   'zh-TW': {
     title: '乾坤K線',
@@ -151,7 +154,10 @@ export const TRANSLATIONS = {
     wechat: '微信',
     verified: '已驗證',
     copyContact: '複製',
-    inputPlaceholder: '在此輸入激活碼'
+    inputPlaceholder: '在此輸入激活碼',
+    xianyuBuy: '閒魚購買',
+    xianyuBuyDesc: '在閒魚平台購買，安全便捷',
+    xianyuLink: '打開閒魚鏈接'
   }
 };
 

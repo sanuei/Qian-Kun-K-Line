@@ -265,11 +265,15 @@ const App: React.FC = () => {
         </div>
       </footer>
 
-      {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
+      {showAdmin && (
+        <div className="fixed inset-0 z-[100]">
+          <AdminPanel onClose={() => setShowAdmin(false)} />
+        </div>
+      )}
 
       {/* Admin Login Modal */}
       {showAdminLogin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-[#2C1810]/60">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-sm bg-[#2C1810]/60">
            <div className="bg-[#FDFBF7] p-8 w-80 rounded-sm border-2 border-[#A93226] shadow-2xl animate-fade-in-up">
               <div className="text-center mb-6">
                 <Lock className="w-8 h-8 mx-auto text-[#A93226] mb-2" />

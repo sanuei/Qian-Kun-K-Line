@@ -41,7 +41,7 @@ const AdminPanel: React.FC<Props> = ({ onClose }) => {
   const activeCount = codes.filter(c => !c.isUsed).length;
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#2C1810] bg-opacity-95 flex items-center justify-center p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[100] bg-[#2C1810] bg-opacity-95 flex items-center justify-center p-4 backdrop-blur-sm">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b border-gray-200 bg-[#FDFBF7]">

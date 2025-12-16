@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { UserInput, Gender, Language } from '../types';
-import { Sparkles, Lock, Key, Globe, Share2, CheckCircle2, Copy, X } from 'lucide-react';
+import { Sparkles, Lock, Key, Globe, Share2, CheckCircle2, Copy, X, ShoppingBag, ExternalLink } from 'lucide-react';
 import { TRANSLATIONS } from '../constants';
 import { activateApp, addExtraTrial } from '../services/storageService';
 
@@ -239,46 +239,56 @@ const InputForm: React.FC<Props> = ({
 
       {/* Activation/Limit Modal */}
       {showActivation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#2C1810]/70 backdrop-blur-sm p-4">
-          <div className="bg-[#FDFBF7] rounded-lg shadow-2xl w-full max-w-2xl overflow-hidden animate-fade-in-up border border-[#D7CCC8]">
+        <div className="fixed inset-0 z-[100] flex items-start justify-center bg-[#2C1810]/80 backdrop-blur-md pt-24 pb-8 px-4 animate-fade-in">
+          <div className="bg-[#FDFBF7] rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden animate-fade-in-up border-2 border-[#D7CCC8] max-h-[90vh] overflow-y-auto">
              {/* Header */}
-             <div className="bg-[#2C1810] text-[#FDFBF7] p-6 text-center relative">
+             <div className="bg-gradient-to-r from-[#2C1810] via-[#43291F] to-[#2C1810] text-[#FDFBF7] p-6 text-center relative">
                <button 
                  onClick={() => setShowActivation(false)}
-                 className="absolute right-4 top-4 text-[#8B7E74] hover:text-white"
+                 className="absolute right-4 top-4 text-[#8B7E74] hover:text-white transition-colors p-1 rounded-full hover:bg-white/10"
+                 aria-label="关闭"
                >
-                 <X size={20} />
+                 <X size={22} />
                </button>
-               <Lock className="w-8 h-8 mx-auto text-[#A93226] mb-2" />
-               <h3 className="text-2xl font-serif font-bold tracking-widest">{t.unlockTitle}</h3>
-               <p className="text-sm opacity-80 mt-1 font-sans">{t.limitDesc}</p>
+               <div className="flex items-center justify-center gap-3 mb-3">
+                 <div className="p-3 bg-[#A93226]/20 rounded-full border-2 border-[#A93226]/30">
+                   <Lock className="w-6 h-6 text-[#A93226]" />
+                 </div>
+                 <h3 className="text-2xl font-serif font-bold tracking-widest">{t.unlockTitle}</h3>
+               </div>
+               <p className="text-sm opacity-90 mt-2 font-sans">{t.limitDesc}</p>
              </div>
 
-             <div className="flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-[#D7CCC8]">
+             <div className="p-6 space-y-4 bg-gradient-to-b from-[#FDFBF7] to-[#F7F5EB]">
                
                {/* Option 1: Share */}
-               <div className="flex-1 p-8 text-center bg-[#F7F5EB] flex flex-col justify-between">
-                 <div>
-                    <div className="w-12 h-12 bg-[#E0F2F1] rounded-full flex items-center justify-center mx-auto mb-4 text-[#1D8348]">
-                      <Share2 size={24} />
+               <div className="bg-white rounded-xl p-6 border-2 border-[#E0F2F1] shadow-md hover:shadow-lg transition-all hover:border-[#1D8348] group">
+                 <div className="flex items-start gap-4 mb-4">
+                    <div className="w-14 h-14 bg-gradient-to-br from-[#E0F2F1] to-[#B2DFDB] rounded-xl flex items-center justify-center text-[#1D8348] shadow-sm group-hover:scale-110 transition-transform">
+                      <Share2 size={28} />
                     </div>
-                    <h4 className="text-lg font-bold text-[#2C1810] mb-2">{t.unlockOption1}</h4>
-                    <p className="text-sm text-[#5D4037] mb-6">{t.unlockOption1Desc}</p>
+                    <div className="flex-1">
+                      <h4 className="text-lg font-bold text-[#2C1810] mb-1 flex items-center gap-2">
+                        {t.unlockOption1}
+                        <span className="text-xs bg-[#1D8348]/10 text-[#1D8348] px-2 py-0.5 rounded-full font-normal">免费</span>
+                      </h4>
+                      <p className="text-sm text-[#5D4037] leading-relaxed">{t.unlockOption1Desc}</p>
+                    </div>
                  </div>
                  
                  <button 
                    onClick={handleShare}
                    disabled={isSharing || shareSuccess}
-                   className={`w-full py-3 rounded font-bold transition-all flex items-center justify-center gap-2 ${
+                   className={`w-full py-3.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-sm ${
                      shareSuccess 
-                     ? 'bg-[#1D8348] text-white cursor-default'
-                     : 'bg-white border-2 border-[#1D8348] text-[#1D8348] hover:bg-[#1D8348] hover:text-white'
+                     ? 'bg-gradient-to-r from-[#1D8348] to-[#16A085] text-white cursor-default'
+                     : 'bg-white border-2 border-[#1D8348] text-[#1D8348] hover:bg-gradient-to-r hover:from-[#1D8348] hover:to-[#16A085] hover:text-white hover:border-transparent hover:shadow-md'
                    }`}
                  >
                    {shareSuccess ? (
                      <>
                        <CheckCircle2 size={18} />
-                       <span>{t.verified} (+1)</span>
+                       <span>{t.verified} (+1 次免费)</span>
                      </>
                    ) : (
                      <>
@@ -287,72 +297,84 @@ const InputForm: React.FC<Props> = ({
                      </>
                    )}
                  </button>
-                 {shareSuccess && <p className="text-xs text-[#1D8348] mt-2 animate-fade-in">{t.shareToast}</p>}
+                 {shareSuccess && (
+                   <p className="text-xs text-[#1D8348] mt-3 text-center animate-fade-in flex items-center justify-center gap-1">
+                     <CheckCircle2 size={14} />
+                     {t.shareToast}
+                   </p>
+                 )}
                </div>
 
-               {/* Option 2: Pay */}
-               <div className="flex-1 p-8 text-center bg-white relative">
-                 <div className="w-12 h-12 bg-[#FFEBEE] rounded-full flex items-center justify-center mx-auto mb-4 text-[#A93226]">
-                    <Key size={24} />
-                 </div>
-                 <h4 className="text-lg font-bold text-[#2C1810] mb-2">{t.unlockOption2}</h4>
-                 <p className="text-sm text-[#5D4037] mb-4">{t.unlockOption2Desc}</p>
-                 
-                 <div className="mb-4 bg-white p-2 rounded border border-gray-200 inline-block shadow-inner">
-                    {/* QR Code Container */}
-                    <div className="w-32 h-32 bg-[#2C1810] flex items-center justify-center text-white relative overflow-hidden group cursor-pointer">
-                        {/* 
-                           Display the local QR code image. 
-                           User must place 'payment_qr.png' in the public folder.
-                           If not found, it shows alt text which is accessible.
-                        */}
-                       <img 
-                          src="/payment_qr.png" 
-                          alt="WeChat Pay QR" 
-                          className="w-full h-full object-cover transform transition-transform group-hover:scale-105"
-                          onError={(e) => {
-                            // Fallback if image missing
-                            e.currentTarget.style.display = 'none';
-                          }}
-                       />
-                       {/* Fallback Text if image fails to load or while loading */}
-                       <div className="absolute inset-0 -z-10 flex flex-col items-center justify-center bg-gray-100 text-gray-400 text-xs">
-                          <span>Loading...</span>
-                       </div>
+               {/* Divider */}
+               <div className="flex items-center gap-4 my-6">
+                 <div className="flex-1 h-px bg-gradient-to-r from-transparent via-[#D7CCC8] to-[#D7CCC8]"></div>
+                 <span className="text-xs text-[#8B7E74] font-bold tracking-widest">或</span>
+                 <div className="flex-1 h-px bg-gradient-to-l from-transparent via-[#D7CCC8] to-[#D7CCC8]"></div>
+               </div>
+
+               {/* Option 2: Xianyu */}
+               <div className="bg-gradient-to-br from-[#FF6B35] via-[#F7931E] to-[#FF8C42] rounded-xl p-6 border-2 border-white/20 shadow-lg hover:shadow-xl transition-all group">
+                 <div className="flex items-start gap-4 mb-4">
+                    <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center text-white shadow-md group-hover:scale-110 transition-transform">
+                       <ShoppingBag size={28} />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="text-lg font-bold text-white mb-1 flex items-center gap-2">
+                        {t.xianyuBuy}
+                        <span className="text-xs bg-white/20 text-white px-2 py-0.5 rounded-full font-normal">推荐</span>
+                      </h4>
+                      <p className="text-sm text-white/95 leading-relaxed">{t.xianyuBuyDesc}</p>
                     </div>
                  </div>
                  
-                 <p className="text-2xl font-bold text-[#A93226] mb-2">{t.price}</p>
-                 <p className="text-xs text-[#8B7E74] mb-4">{t.scanToPay}</p>
+                 <a
+                   href="https://m.tb.cn/h.7dZbeyr?tk=sKQBfFIFuK8"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   className="w-full py-3.5 bg-white text-[#FF6B35] rounded-xl font-bold transition-all flex items-center justify-center gap-2 hover:bg-gray-50 hover:shadow-xl hover:scale-[1.02] group"
+                 >
+                   <ExternalLink size={18} className="group-hover:translate-x-1 transition-transform" />
+                   <span>{t.xianyuLink}</span>
+                 </a>
+                 <p className="text-xs text-white/90 mt-3 text-center flex items-center justify-center gap-1">
+                   <span>✨</span>
+                   在闲鱼购买后自动发货激活码
+                 </p>
+               </div>
 
-                 <div className="text-xs text-[#5D4037] bg-[#F2F0E9] p-3 rounded">
-                    <p className="mb-1">{t.contactSupport}:</p>
-                    <div className="flex items-center justify-center gap-2 font-mono font-bold text-[#2C1810]">
-                       <span>sonic_yann</span>
-                       <button onClick={() => navigator.clipboard.writeText('sonic_yann')} className="text-[#A93226]">
-                         <Copy size={12} />
-                       </button>
-                    </div>
-                 </div>
-
-                 {/* Code Input */}
-                 <div className="mt-4 pt-4 border-t border-gray-100">
+               {/* Activation Code Input Section */}
+               <div className="mt-6 pt-6 border-t-2 border-[#D7CCC8]">
+                 <div className="bg-white rounded-xl p-6 border-2 border-[#D7CCC8] shadow-md">
+                   <div className="flex items-center gap-3 mb-4">
+                     <div className="w-10 h-10 bg-gradient-to-br from-[#2C1810] to-[#43291F] rounded-lg flex items-center justify-center text-white">
+                       <Key size={20} />
+                     </div>
+                     <div>
+                       <h4 className="text-base font-bold text-[#2C1810]">已有激活码？</h4>
+                       <p className="text-xs text-[#5D4037]">输入激活码立即解锁</p>
+                     </div>
+                   </div>
                    <div className="flex gap-2">
                      <input 
                        type="text"
                        placeholder={t.inputPlaceholder}
                        value={activationCode}
                        onChange={(e) => setActivationCode(e.target.value)}
-                       className="flex-1 border border-[#D7CCC8] rounded px-3 py-2 text-sm outline-none focus:border-[#A93226] uppercase font-mono"
+                       className="flex-1 border-2 border-[#D7CCC8] rounded-lg px-4 py-2.5 text-sm outline-none focus:border-[#A93226] focus:ring-2 focus:ring-[#A93226]/20 uppercase font-mono transition-all"
                      />
                      <button 
                        onClick={handleActivate}
-                       className="bg-[#2C1810] text-white px-4 py-2 rounded text-sm hover:bg-[#43291F]"
+                       className="bg-gradient-to-r from-[#2C1810] to-[#43291F] text-white px-6 py-2.5 rounded-lg text-sm font-bold hover:shadow-lg transition-all hover:scale-105"
                      >
                        {t.activate}
                      </button>
                    </div>
-                   {errorMsg && <p className="text-xs text-[#A93226] mt-2 text-left">{errorMsg}</p>}
+                   {errorMsg && (
+                     <p className="text-xs text-[#A93226] mt-2 flex items-center gap-1">
+                       <span>⚠️</span>
+                       {errorMsg}
+                     </p>
+                   )}
                  </div>
                </div>
 

@@ -10,10 +10,8 @@ export default defineConfig(({ mode }) => {
         host: '0.0.0.0',
       },
       plugins: [react()],
-      define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
-      },
+      // 不再需要注入 API Key，因为现在使用后端代理
+      // VITE_API_BASE_URL 环境变量会自动通过 import.meta.env.VITE_API_BASE_URL 访问
       resolve: {
         alias: {
           '@': path.resolve(__dirname, '.'),
