@@ -10,4 +10,3 @@ name = "qiankun-gemini-proxy"
 
 [env.development]
 name = "qiankun-gemini-proxy-dev"
-
