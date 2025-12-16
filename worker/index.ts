@@ -143,77 +143,122 @@ export default {
   `;
 
       // 调用 Gemini API
-      // 使用 gemini-2.0-flash-exp 或 gemini-1.5-flash
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${env.GEMINI_API_KEY}`;
-
-      const geminiResponse = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
+      // 使用 Gemini 2 Flash 模型（从 AI Studio 创建的 API Key）
+      // 尝试多个可能的模型名称，按优先级排序
+      const modelNames = [
+        'gemini-2.0-flash-exp',  // Gemini 2 Flash 实验版
+        'gemini-2.0-flash',      // Gemini 2 Flash 稳定版
+        'gemini-2.5-flash',      // Gemini 2.5 Flash
+        'gemini-1.5-flash',      // 回退到 1.5 Flash
+      ];
+      
+      let geminiResponse: Response | null = null;
+      let lastError: string = '';
+      
+      // 尝试每个模型名称
+      for (const modelName of modelNames) {
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${env.GEMINI_API_KEY}`;
+        
+        try {
+          geminiResponse = await fetch(geminiUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              contents: [
                 {
-                  text: prompt,
+                  parts: [
+                    {
+                      text: prompt,
+                    },
+                  ],
                 },
               ],
-            },
-          ],
-          generationConfig: {
-            responseMimeType: 'application/json',
-            responseSchema: {
-              type: 'object',
-              properties: {
-                overallDestiny: { type: 'string' },
-                turningPoints: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      age: { type: 'integer' },
-                      year: { type: 'integer' },
-                      description: { type: 'string' },
-                      type: {
-                        type: 'string',
-                        enum: ['BULL', 'BEAR', 'VOLATILE'],
-                      },
-                    },
-                  },
-                },
-                financialAdvice: { type: 'string' },
-                luckyAssets: {
+              generationConfig: {
+                responseMimeType: 'application/json',
+                responseSchema: {
                   type: 'object',
                   properties: {
-                    stock: {
-                      type: 'object',
-                      properties: {
-                        symbol: { type: 'string' },
-                        name: { type: 'string' },
-                        reason: { type: 'string' },
+                    overallDestiny: { type: 'string' },
+                    turningPoints: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          age: { type: 'integer' },
+                          year: { type: 'integer' },
+                          description: { type: 'string' },
+                          type: {
+                            type: 'string',
+                            enum: ['BULL', 'BEAR', 'VOLATILE'],
+                          },
+                        },
                       },
                     },
-                    crypto: {
+                    financialAdvice: { type: 'string' },
+                    luckyAssets: {
                       type: 'object',
                       properties: {
-                        symbol: { type: 'string' },
-                        name: { type: 'string' },
-                        reason: { type: 'string' },
+                        stock: {
+                          type: 'object',
+                          properties: {
+                            symbol: { type: 'string' },
+                            name: { type: 'string' },
+                            reason: { type: 'string' },
+                          },
+                        },
+                        crypto: {
+                          type: 'object',
+                          properties: {
+                            symbol: { type: 'string' },
+                            name: { type: 'string' },
+                            reason: { type: 'string' },
+                          },
+                        },
                       },
                     },
                   },
                 },
               },
+            }),
+          });
+          
+          // 如果成功，跳出循环
+          if (geminiResponse.ok) {
+            console.log(`Successfully used model: ${modelName}`);
+            break;
+          } else {
+            const errorText = await geminiResponse.text();
+            lastError = `Model ${modelName}: ${geminiResponse.status} - ${errorText}`;
+            console.warn(`Model ${modelName} failed:`, lastError);
+            geminiResponse = null;
+          }
+        } catch (error) {
+          lastError = `Model ${modelName}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+          console.warn(`Model ${modelName} error:`, lastError);
+          geminiResponse = null;
+        }
+      }
+      
+      // 如果所有模型都失败
+      if (!geminiResponse || !geminiResponse.ok) {
+        console.error('All models failed. Last error:', lastError);
+        return new Response(
+          JSON.stringify({
+            error: 'Gemini API error',
+            status: geminiResponse?.status || 500,
+            message: lastError || 'All model attempts failed',
+            triedModels: modelNames,
+          }),
+          {
+            status: 500,
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
             },
-          },
-        }),
-      });
-
-      if (!geminiResponse.ok) {
-        const errorText = await geminiResponse.text();
-        console.error('Gemini API error:', errorText);
-        throw new Error(`Gemini API error: ${geminiResponse.status}`);
+          }
+        );
       }
 
       const geminiData = await geminiResponse.json();
