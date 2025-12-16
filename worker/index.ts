@@ -43,6 +43,101 @@ interface GeminiResponse {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    const extractJsonString = (text: string): string | null => {
+      if (!text) return null;
+      // Strip common Markdown code fences
+      let cleaned = text.trim();
+      cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/```$/i, '').trim();
+      // If there are multiple fences, remove all occurrences
+      cleaned = cleaned.replace(/```(?:json)?/gi, '').trim();
+
+      const first = cleaned.indexOf('{');
+      const last = cleaned.lastIndexOf('}');
+      if (first === -1 || last === -1 || last <= first) return null;
+      return cleaned.slice(first, last + 1);
+    };
+
+    const normalizePlainText = (text: string): string => {
+      if (!text) return '';
+      return text
+        .replace(/```(?:json)?/gi, '')
+        .replace(/```/g, '')
+        .trim();
+    };
+
+    const normalizeToSchema = (raw: any, lang: 'zh-CN' | 'zh-TW', birthDate: string): GeminiResponse => {
+      const fallbackText =
+        lang === 'zh-CN'
+          ? '天机混沌，暂无法批断。请稍后重试。'
+          : '天機混沌，暫無法批斷。請稍後重試。';
+
+      const birthYear = parseInt((birthDate || '2000-01-01').split('-')[0]) || 2000;
+
+      const safeType = (t: any): 'BULL' | 'BEAR' | 'VOLATILE' => {
+        if (t === 'BULL' || t === 'BEAR' || t === 'VOLATILE') return t;
+        return 'VOLATILE';
+      };
+
+      const safeStr = (v: any, fb: string) => (typeof v === 'string' && v.trim() ? v.trim() : fb);
+
+      const out: GeminiResponse = {
+        overallDestiny: safeStr(raw?.overallDestiny, fallbackText),
+        turningPoints: [],
+        financialAdvice: safeStr(raw?.financialAdvice, lang === 'zh-CN' ? '顺势而为，守正出奇。' : '順勢而為，守正出奇。'),
+        luckyAssets: {
+          stock: {
+            symbol: safeStr(raw?.luckyAssets?.stock?.symbol, '600519'),
+            name: safeStr(raw?.luckyAssets?.stock?.name, 'Kweichow Moutai'),
+            reason: safeStr(raw?.luckyAssets?.stock?.reason, 'Stable as a mountain.'),
+          },
+          crypto: {
+            symbol: safeStr(raw?.luckyAssets?.crypto?.symbol, 'BTC'),
+            name: safeStr(raw?.luckyAssets?.crypto?.name, 'Bitcoin'),
+            reason: safeStr(raw?.luckyAssets?.crypto?.reason, 'Digital gold for a golden destiny.'),
+          },
+        },
+      };
+
+      // turningPoints normalization:
+      // - accept objects with age/year (description/type optional)
+      // - dedupe by age
+      // - keep first 3
+      const tps: any[] = Array.isArray(raw?.turningPoints) ? raw.turningPoints : [];
+      const seenAge = new Set<number>();
+      for (const tp of tps) {
+        const age = Number(tp?.age);
+        if (!Number.isFinite(age)) continue;
+        const year = Number.isFinite(Number(tp?.year)) ? Number(tp.year) : birthYear + Math.round(age);
+        if (seenAge.has(age)) continue;
+        seenAge.add(age);
+        out.turningPoints.push({
+          age: Math.round(age),
+          year: Math.round(year),
+          description: safeStr(
+            tp?.description,
+            lang === 'zh-CN' ? '此岁为运势转折点，宜稳中求进。' : '此歲為運勢轉折點，宜穩中求進。'
+          ),
+          type: safeType(tp?.type),
+        });
+        if (out.turningPoints.length >= 3) break;
+      }
+      // If missing, synthesize 3 points
+      if (out.turningPoints.length < 3) {
+        const defaults = [10, 20, 35];
+        for (const age of defaults) {
+          if (out.turningPoints.length >= 3) break;
+          if (seenAge.has(age)) continue;
+          out.turningPoints.push({
+            age,
+            year: birthYear + age,
+            description: lang === 'zh-CN' ? '此岁运势有变，宜积累筹码。' : '此歲運勢有變，宜積累籌碼。',
+            type: 'VOLATILE',
+          });
+        }
+      }
+      return out;
+    };
+
     // CORS 处理
     if (request.method === 'OPTIONS') {
       return new Response(null, {
@@ -119,7 +214,8 @@ export default {
        - Use "Bear Market" only to mean a time for study and self-improvement, not loss.
     
     Task:
-    Provide a JSON response.
+    Return ONLY valid JSON (no markdown, no code fences, no extra text). The JSON MUST strictly follow the schema below.
+    turningPoints MUST be an array of EXACTLY 3 objects, each with: age, year, description, type.
     
     1. overallDestiny: A summary paragraph (approx 80 words) describing the person's "Destiny Asset Class". Use glowing metaphors like "Blue Chip", "High Growth Unicorn", "Digital Gold". 
     2. turningPoints: Identify 3 critical ages. 
@@ -267,36 +363,14 @@ export default {
 
       let result: GeminiResponse;
       try {
-        result = JSON.parse(responseText);
+        const jsonStr = extractJsonString(responseText);
+        if (!jsonStr) throw new Error('No JSON object found in model response');
+        const parsed = JSON.parse(jsonStr);
+        result = normalizeToSchema(parsed, lang, input.birthDate);
       } catch (e) {
-        // 如果解析失败，返回默认值
-        result = {
-          overallDestiny:
-            lang === 'zh-CN'
-              ? '天机混沌，暂无法批断。请稍后重试。'
-              : '天機混沌，暫無法批斷。請稍後重試。',
-          turningPoints: [
-            {
-              age: 30,
-              year: parseInt(input.birthDate.split('-')[0]) + 30,
-              description: '...',
-              type: 'VOLATILE' as const,
-            },
-          ],
-          financialAdvice: '...',
-          luckyAssets: {
-            stock: {
-              symbol: '600519',
-              name: 'Kweichow Moutai',
-              reason: 'Stable as a mountain.',
-            },
-            crypto: {
-              symbol: 'BTC',
-              name: 'Bitcoin',
-              reason: 'Digital gold for a golden destiny.',
-            },
-          },
-        };
+        // 如果解析失败：尽量把原文塞进 overallDestiny，并补齐其余字段
+        const rawText = normalizePlainText(responseText);
+        result = normalizeToSchema({ overallDestiny: rawText }, lang, input.birthDate);
       }
 
       return new Response(JSON.stringify(result), {
