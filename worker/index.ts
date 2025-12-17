@@ -5,6 +5,11 @@
 
 export interface Env {
   GEMINI_API_KEY: string;
+  // Optional: persist admin data to GitHub via this Worker (server-side)
+  GITHUB_TOKEN?: string; // fine-grained token with Contents:write for the repo
+  GITHUB_REPO?: string; // e.g. "sanuei/Qian-Kun-K-Line"
+  GITHUB_FILE_PATH?: string; // e.g. "data/admin_data.json"
+  ADMIN_SYNC_TOKEN?: string; // shared secret to authorize sync calls from Admin UI
 }
 
 interface GeminiRequest {
@@ -79,9 +84,25 @@ export default {
       };
 
       const safeStr = (v: any, fb: string) => (typeof v === 'string' && v.trim() ? v.trim() : fb);
+      const clampText = (s: string, max = 800) => (s.length > max ? s.slice(0, max).trimEnd() + '…' : s);
+
+      let overall = safeStr(raw?.overallDestiny, fallbackText);
+      // If model accidentally returned JSON string as text, strip it to a readable paragraph
+      if (/^\s*\{/.test(overall) && overall.includes('"overallDestiny"')) {
+        const js = extractJsonString(overall);
+        if (js) {
+          try {
+            const parsedInner = JSON.parse(js);
+            if (parsedInner?.overallDestiny) overall = String(parsedInner.overallDestiny);
+          } catch {
+            // ignore
+          }
+        }
+      }
+      overall = clampText(overall);
 
       const out: GeminiResponse = {
-        overallDestiny: safeStr(raw?.overallDestiny, fallbackText),
+        overallDestiny: overall,
         turningPoints: [],
         financialAdvice: safeStr(raw?.financialAdvice, lang === 'zh-CN' ? '顺势而为，守正出奇。' : '順勢而為，守正出奇。'),
         luckyAssets: {
@@ -107,7 +128,11 @@ export default {
       for (const tp of tps) {
         const age = Number(tp?.age);
         if (!Number.isFinite(age)) continue;
-        const year = Number.isFinite(Number(tp?.year)) ? Number(tp.year) : birthYear + Math.round(age);
+        // Guard against garbage "year" like extremely long numbers/strings
+        const yearNum = Number(tp?.year);
+        const year = Number.isFinite(yearNum) && yearNum >= 1900 && yearNum <= 2100
+          ? yearNum
+          : birthYear + Math.round(age);
         if (seenAge.has(age)) continue;
         seenAge.add(age);
         out.turningPoints.push({
@@ -138,27 +163,124 @@ export default {
       return out;
     };
 
+    const urlObj = new URL(request.url);
+    const path = urlObj.pathname;
+
     // CORS 处理
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         status: 204,
         headers: {
           'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Token',
           'Access-Control-Max-Age': '86400',
         },
       });
     }
 
-    // 只允许 POST 请求
-    if (request.method !== 'POST') {
+    // --- Admin GitHub persistence endpoints ---
+    // GET  /admin/data   -> load JSON from GitHub
+    // POST /admin/data   -> write JSON to GitHub (requires X-Admin-Token)
+    if (path === '/admin/data') {
+      const ghRepo = env.GITHUB_REPO;
+      const ghPath = env.GITHUB_FILE_PATH || 'data/admin_data.json';
+      const ghToken = env.GITHUB_TOKEN;
+
+      if (!ghRepo || !ghToken) {
+        return new Response(
+          JSON.stringify({ error: 'GitHub persistence not configured', need: ['GITHUB_REPO', 'GITHUB_TOKEN'] }),
+          { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
+        );
+      }
+
+      const apiBase = `https://api.github.com/repos/${ghRepo}/contents/${ghPath}`;
+      const headers = {
+        'Accept': 'application/vnd.github+json',
+        'Authorization': `Bearer ${ghToken}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+      };
+
+      if (request.method === 'GET') {
+        const r = await fetch(apiBase, { headers });
+        if (!r.ok) {
+          const t = await r.text();
+          return new Response(JSON.stringify({ error: 'GitHub load failed', status: r.status, message: t }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
+        const json = await r.json() as any;
+        const content = json?.content;
+        if (!content) {
+          return new Response(JSON.stringify({ error: 'GitHub file content missing' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
+        // content is base64 with newlines
+        const b64 = String(content).replace(/\n/g, '');
+        const decoded = atob(b64);
+        return new Response(decoded, {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      }
+
+      if (request.method === 'POST') {
+        const adminToken = request.headers.get('X-Admin-Token') || '';
+        if (!env.ADMIN_SYNC_TOKEN || adminToken !== env.ADMIN_SYNC_TOKEN) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
+
+        const bodyText = await request.text();
+
+        // Fetch sha if file exists
+        let sha: string | undefined;
+        const existing = await fetch(apiBase, { headers });
+        if (existing.ok) {
+          const ex = await existing.json() as any;
+          sha = ex?.sha;
+        }
+
+        const payload: any = {
+          message: `Update admin data (${new Date().toISOString()})`,
+          content: btoa(bodyText),
+        };
+        if (sha) payload.sha = sha;
+
+        const wr = await fetch(apiBase, {
+          method: 'PUT',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!wr.ok) {
+          const t = await wr.text();
+          return new Response(JSON.stringify({ error: 'GitHub write failed', status: wr.status, message: t }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          });
+        }
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        });
+      }
+
       return new Response(JSON.stringify({ error: 'Method not allowed' }), {
         status: 405,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      });
+    }
+
+    // Default analyze endpoint: only allow POST at '/'
+    if (request.method !== 'POST' || path !== '/') {
+      return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+        status: 405,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
       });
     }
 
@@ -196,7 +318,8 @@ export default {
         lang === 'zh-CN' ? 'Simplified Chinese (zh-CN)' : 'Traditional Chinese (zh-TW)';
 
       const prompt = `
-    Role: You are a legendary ancient Chinese fortune teller (BaZi master) who is also a modern financial visionary. You speak in a mix of profound ancient Chinese idioms (文言文/Chengyu) and modern financial technical analysis terms.
+    Role: You are a professional Chinese BaZi fortune-teller (命理师) AND a modern financial strategist.
+    Style: concise, structured, persuasive, positive, no fear-mongering. Mix a little classical Chinese flavor with clear modern advice.
 
     Input:
     User: ${input.name} (${input.gender})
@@ -208,14 +331,20 @@ export default {
     Output Language: ${langInstruction}
 
     Constraints:
-    1. **EXTREMELY POSITIVE TONE**: The goal is to provide **Emotional Value** and make the user feel confident and happy. 
-       - Even if the trend data is down, interpret it as "Accumulation", "Rest", or "Wisdom building" (Hidden Dragon/Qian Long). 
-       - NEVER be negative. Always find the silver lining.
-       - Use "Bear Market" only to mean a time for study and self-improvement, not loss.
+    - MUST be helpful and positive. Down cycles = accumulation, reset, learning.
+    - No medical/legal/guarantees. No extreme negativity.
+    - Use specific and plausible assets; keep to 1 stock + 1 crypto.
+    - DO NOT repeat fields, DO NOT output long numbers, DO NOT include any markdown.
     
     Task:
     Return ONLY valid JSON (no markdown, no code fences, no extra text). The JSON MUST strictly follow the schema below.
     turningPoints MUST be an array of EXACTLY 3 objects, each with: age, year, description, type.
+    
+    Content guidance (professional flow):
+    - overallDestiny: 120-180 Chinese characters, include: 命格总论 + 财运节奏（早/中/晚）+ 一句话定性（如“蓝筹/成长/波动”）
+    - turningPoints: 3 key ages that match the provided trend points; each description <= 28 Chinese chars, actionable.
+    - financialAdvice: 1 sentence, concrete action (e.g. "30-35 定投技能与现金流，40 后加杠杆于确定性")
+    - luckyAssets: pick 1 stock + 1 crypto, each reason <= 20 Chinese chars.
     
     1. overallDestiny: A summary paragraph (approx 80 words) describing the person's "Destiny Asset Class". Use glowing metaphors like "Blue Chip", "High Growth Unicorn", "Digital Gold". 
     2. turningPoints: Identify 3 critical ages. 
@@ -252,6 +381,20 @@ export default {
       let lastError: string = '';
       
       // 尝试每个模型名称
+      // Gemini REST API does not reliably support responseSchema; keep request minimal and enforce via prompt + post-processing.
+      const makeBody = () =>
+        JSON.stringify({
+          contents: [
+            {
+              parts: [{ text: prompt }],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 1024,
+          },
+        });
+
       for (const modelName of modelNames) {
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${env.GEMINI_API_KEY}`;
         
@@ -261,63 +404,7 @@ export default {
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [
-                    {
-                      text: prompt,
-                    },
-                  ],
-                },
-              ],
-              generationConfig: {
-                responseMimeType: 'application/json',
-                responseSchema: {
-                  type: 'object',
-                  properties: {
-                    overallDestiny: { type: 'string' },
-                    turningPoints: {
-                      type: 'array',
-                      items: {
-                        type: 'object',
-                        properties: {
-                          age: { type: 'integer' },
-                          year: { type: 'integer' },
-                          description: { type: 'string' },
-                          type: {
-                            type: 'string',
-                            enum: ['BULL', 'BEAR', 'VOLATILE'],
-                          },
-                        },
-                      },
-                    },
-                    financialAdvice: { type: 'string' },
-                    luckyAssets: {
-                      type: 'object',
-                      properties: {
-                        stock: {
-                          type: 'object',
-                          properties: {
-                            symbol: { type: 'string' },
-                            name: { type: 'string' },
-                            reason: { type: 'string' },
-                          },
-                        },
-                        crypto: {
-                          type: 'object',
-                          properties: {
-                            symbol: { type: 'string' },
-                            name: { type: 'string' },
-                            reason: { type: 'string' },
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            }),
+            body: makeBody(),
           });
           
           // 如果成功，跳出循环
